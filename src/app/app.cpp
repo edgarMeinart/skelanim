@@ -2,6 +2,7 @@
 
 #include "app/panels.h"
 #include "app/viewport.h"
+#include "core/figure.h"
 
 #include <GLFW/glfw3.h>
 #include <imgui.h>
@@ -111,6 +112,18 @@ void App::newDocument() {
     history.clear();
     loadClipVideo();
     fitRequested = true;
+}
+
+void App::loadDanceDemo() {
+    newDocument();
+    doc.name = "dancing_queen";
+    const ImVec2 canvas = canvasSize();
+    skel::addExampleFigure(doc, {canvas.x, canvas.y});
+    doc.clips.clear();
+    skel::addDancingQueenClip(doc, {canvas.x, canvas.y});
+    selectClip(0);
+    setMode(Mode::Animate);
+    st.playing = true;
 }
 
 void App::pushUndo() {
@@ -315,6 +328,7 @@ void App::runPending(Pending action) {
         case Pending::New: newDocument(); break;
         case Pending::Open: openDialog(); break;
         case Pending::Quit: quitConfirmed_ = true; break;
+        case Pending::Dance: loadDanceDemo(); break;
         case Pending::None: break;
     }
 }
@@ -506,6 +520,7 @@ void App::drawMenuBar() {
     }
     if (ImGui::BeginMenu("Help")) {
         if (ImGui::MenuItem("Tutorial")) tutorial.start();
+        if (ImGui::MenuItem("Dance like queen")) requestAction(Pending::Dance);
         if (ImGui::MenuItem("Show tutorial on startup", nullptr, &settings.showTutorial)) saveSettings();
         ImGui::EndMenu();
     }

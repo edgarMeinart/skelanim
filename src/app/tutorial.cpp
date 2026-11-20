@@ -2,6 +2,7 @@
 
 #include "app/app.h"
 #include "app/settings.h"
+#include "core/figure.h"
 
 #include <imgui.h>
 #include <imgui_internal.h>  // FindWindowByName for window targets
@@ -18,37 +19,9 @@
 
 namespace {
 
-// --- Example skeleton -------------------------------------------------------
-// Joint coordinates in figure units: x relative to the canvas centre, y from the top of the head;
-// 1 unit = 84% of the canvas height. Parents precede children.
-
-struct ExampleBone {
-    const char* name;
-    const char* parent;
-    float hx, hy, tx, ty;  // head, tail
-    int stage;             // 0 spine chain, 1 arms, 2 legs
-};
-
-constexpr ExampleBone kExample[] = {
-    {"pelvis", nullptr, 0.00f, 0.50f, 0.00f, 0.42f, 0},
-    {"spine", "pelvis", 0.00f, 0.42f, 0.00f, 0.21f, 0},
-    {"neck", "spine", 0.00f, 0.21f, 0.00f, 0.14f, 0},
-    {"head", "neck", 0.00f, 0.14f, 0.00f, 0.00f, 0},
-    {"upper_arm_l", "spine", -0.08f, 0.23f, -0.13f, 0.37f, 1},
-    {"forearm_l", "upper_arm_l", -0.13f, 0.37f, -0.15f, 0.50f, 1},
-    {"upper_arm_r", "spine", 0.08f, 0.23f, 0.13f, 0.37f, 1},
-    {"forearm_r", "upper_arm_r", 0.13f, 0.37f, 0.15f, 0.50f, 1},
-    {"thigh_l", "pelvis", -0.05f, 0.50f, -0.06f, 0.73f, 2},
-    {"shin_l", "thigh_l", -0.06f, 0.73f, -0.06f, 0.96f, 2},
-    {"thigh_r", "pelvis", 0.05f, 0.50f, 0.06f, 0.73f, 2},
-    {"shin_r", "thigh_r", 0.06f, 0.73f, 0.06f, 0.96f, 2},
-};
-constexpr int kExampleCount = int(sizeof kExample / sizeof kExample[0]);
-
 ska::Vec2 toCanvas(const App& app, float x, float y) {
     const ImVec2 c = app.canvasSize();
-    const float h = c.y * 0.84f;
-    return {c.x * 0.5f + x * h, c.y * 0.08f + y * h};
+    return skel::figureToCanvas({c.x, c.y}, x, y);
 }
 
 // Local rotation offsets (radians, added to the rest pose) for the two example keys.
@@ -62,12 +35,6 @@ constexpr PoseDelta kPoseA[] = {{"upper_arm_l", 0.5f}, {"forearm_l", 0.6f}, {"up
 constexpr PoseDelta kPoseB[] = {{"upper_arm_r", -0.5f}, {"forearm_r", -0.6f}, {"upper_arm_l", -0.15f},
                                 {"forearm_l", 0.3f},    {"thigh_r", 0.3f},    {"shin_r", -0.6f},
                                 {"thigh_l", -0.1f},     {"spine", -0.05f},    {"head", 0.05f}};
-
-int findBone(const ska::Document& doc, const char* name) {
-    for (size_t i = 0; i < doc.bones.size(); ++i)
-        if (doc.bones[i].name == name) return int(i);
-    return -1;
-}
 
 bool isDefaultName(const std::string& n) {
     if (n.rfind("bone_", 0) != 0 || n.size() == 5) return false;
@@ -123,12 +90,8 @@ struct TutorialSteps {
         ska::Document& doc = app.doc;
         while (!doc.bones.empty()) skel::deleteBone(doc, int(doc.bones.size()) - 1);
         for (ska::Clip& c : doc.clips) c.keys.clear();
-        for (const ExampleBone& e : kExample) {
-            if (e.stage > stage) continue;
-            const int parent = e.parent ? findBone(doc, e.parent) : -1;
-            const int idx = skel::addBone(doc, parent, toCanvas(app, e.hx, e.hy), toCanvas(app, e.tx, e.ty));
-            if (idx >= 0) doc.bones[size_t(idx)].name = e.name;
-        }
+        const ImVec2 canvas = app.canvasSize();
+        skel::addExampleFigure(doc, {canvas.x, canvas.y}, stage);
         app.setMode(Mode::Setup);
         app.st.selectedBone = int(doc.bones.size()) - 1;
         app.setFrame(0);
@@ -148,7 +111,7 @@ struct TutorialSteps {
                     d = deltas[k].rotation;
                     named = true;
                 }
-            if (!named && findBone(doc, kExample[0].name) >= 0) d = 0;  // example skeleton: unlisted bones stay
+            if (!named && skel::findBone(doc, "pelvis") >= 0) d = 0;  // example skeleton: unlisted bones stay
             pose[i].rotation = ska::wrapPi(pose[i].rotation + d);
         }
         const int k = skel::ensureKey(doc, app.clip(), frame);
@@ -274,10 +237,11 @@ std::span<const TutorialSteps::Step> TutorialSteps::steps() {
      },
      [](App& a, Tutorial&) {
          a.pushUndo();
-         for (int i = 0; i < kExampleCount; ++i) a.doc.bones[size_t(i)].name = kExample[i].name;
+         const auto figure = skel::exampleFigure();
+         for (size_t i = 0; i < figure.size(); ++i) a.doc.bones[i].name = figure[i].name;
      },
      [](const App& a, const Tutorial&) -> const char* {
-         return a.doc.bones.size() == size_t(kExampleCount) ? nullptr : "Needs the 12-bone figure.";
+         return a.doc.bones.size() == skel::exampleFigure().size() ? nullptr : "Needs the 12-bone figure.";
      }},
 
     {"Animate mode",
@@ -399,7 +363,7 @@ void Tutorial::guide(const App& app, std::vector<std::pair<ska::Vec2, ska::Vec2>
     out.clear();
     if (!open_) return;
     const int stage = S::steps()[step_].guideStage;
-    for (const ExampleBone& e : kExample)
+    for (const skel::FigureBone& e : skel::exampleFigure())
         if (e.stage <= stage) out.push_back({toCanvas(app, e.hx, e.hy), toCanvas(app, e.tx, e.ty)});
 }
 

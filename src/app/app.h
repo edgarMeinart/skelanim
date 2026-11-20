@@ -74,13 +74,15 @@ public:
 
     // Dialog-free file operations (the menu wraps them with file dialogs and the unsaved prompt).
     void newDocument();
+    // Help > Dance like queen: new document with the example figure and its looping disco clip.
+    void loadDanceDemo();
     void openDocument(const std::string& path);
     bool saveTo(const std::string& path);
     bool unsavedPromptPending() const { return pending_ != Pending::None; }
 
 private:
     friend struct TutorialSteps;  // tutorial actions reuse save/new with the unsaved prompt
-    enum class Pending { None, New, Open, Quit };
+    enum class Pending { None, New, Open, Quit, Dance };
 
     bool save();
     bool saveAs();

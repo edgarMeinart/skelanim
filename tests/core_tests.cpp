@@ -1,3 +1,4 @@
+#include "core/figure.h"
 #include "core/history.h"
 #include "core/skeleton_ops.h"
 
@@ -349,6 +350,55 @@ void testHistory() {
     CHECK(undos == 200);
 }
 
+// World direction (degrees) of a named bone at a frame of a clip.
+float worldDeg(const ska::Document& doc, const ska::Clip& clip, int frame, const char* bone) {
+    std::vector<Pose> local;
+    ska::sampleFrame(doc, clip, float(frame), local);
+    std::vector<Affine> world;
+    ska::computeWorld(doc, local, world);
+    const Affine& w = world[size_t(skel::findBone(doc, bone))];
+    return std::atan2(w.b, w.a) * 180.0f / kPi;
+}
+
+void testDancingQueen() {
+    const Vec2 canvas{1280, 720};
+    ska::Document doc;
+    skel::addExampleFigure(doc, canvas);
+    CHECK(doc.bones.size() == 12);
+    CHECK(skel::findBone(doc, "shin_r") == 11 && doc.bones[11].parent == skel::findBone(doc, "thigh_r"));
+
+    const int ci = skel::addDancingQueenClip(doc, canvas);
+    CHECK(ci == 0 && doc.clips.size() == 1);
+    const ska::Clip& clip = doc.clips[0];
+    CHECK(clip.name == "dancing_queen" && clip.fpsNum == 30 && clip.fpsDen == 1 && clip.frameCount == 150);
+    CHECK(clip.keys.size() == 14);
+    for (size_t k = 0; k < clip.keys.size(); ++k) {
+        CHECK(clip.keys[k].poses.size() == doc.bones.size());
+        if (k > 0) CHECK(clip.keys[k].frame > clip.keys[k - 1].frame);
+    }
+    CHECK(clip.keys.back().frame == 149);
+
+    // The choreography lands: disco point up-right, then down-left; Y arms up and out.
+    CHECK(near(worldDeg(doc, clip, 0, "upper_arm_r"), -45, 0.01f));
+    CHECK(near(worldDeg(doc, clip, 0, "forearm_l"), 20, 0.01f));
+    CHECK(near(worldDeg(doc, clip, 15, "forearm_r"), 130, 0.01f));
+    CHECK(near(worldDeg(doc, clip, 72, "upper_arm_l"), -125, 0.01f));
+    CHECK(near(worldDeg(doc, clip, 72, "upper_arm_r"), -55, 0.01f));
+    // Hip sway moves the root; unlisted bones keep their rest direction (pelvis points up).
+    CHECK(clip.keys[0].poses[0].translation.x > doc.bones[0].rest.translation.x);
+    CHECK(clip.keys[1].poses[0].translation.x < doc.bones[0].rest.translation.x);
+    CHECK(near(worldDeg(doc, clip, 0, "pelvis"), -90, 0.01f));
+    // Loops: last key repeats the first pose.
+    for (size_t b = 0; b < doc.bones.size(); ++b)
+        CHECK(near(clip.keys.back().poses[b].rotation, clip.keys.front().poses[b].rotation, 1e-6f));
+
+    // Valid .ska content.
+    ska::Document back;
+    std::string err;
+    const std::vector<uint8_t> bytes = ska::write(doc);
+    CHECK(ska::read(bytes.data(), bytes.size(), back, &err));
+}
+
 }  // namespace
 
 int main() {
@@ -359,6 +409,7 @@ int main() {
     testManipulators();
     testKeys();
     testHistory();
+    testDancingQueen();
     std::printf("core_tests: %d checks, %d failures\n", g_checks, g_failures);
     return g_failures ? 1 : 0;
 }

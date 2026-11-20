@@ -70,7 +70,8 @@ target_include_directories(ska INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 add_library(skelanim_core STATIC
   src/core/skeleton_ops.cpp
-  src/core/history.cpp)
+  src/core/history.cpp
+  src/core/figure.cpp)
 target_include_directories(skelanim_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(skelanim_core PUBLIC ska)
 skelanim_setup(skelanim_core)

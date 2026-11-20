@@ -467,6 +467,16 @@ int main(int argc, char** argv) {
     app = new App(window, settingsPath);
     frame(2);
     CHECK(!app->tutorial.isOpen());
+
+    // Help > Dance like queen: loads the example figure with the looping disco clip and plays it.
+    click(itemCenter("Help"));
+    click(itemCenter("Dance like queen"));
+    CHECK(app->doc.bones.size() == 12);
+    CHECK(app->doc.clips.size() == 1 && app->clip().name == "dancing_queen" && app->clip().keys.size() == 14);
+    CHECK(app->st.mode == Mode::Animate && app->st.playing && !app->st.dirty);
+    const int danceFrame = app->st.frame;
+    frame(20);
+    CHECK(app->st.frame != danceFrame);
     std::filesystem::remove(tutorialSka);
     std::filesystem::remove(settingsPath);
 
